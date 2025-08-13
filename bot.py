@@ -23,28 +23,38 @@ TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 if not TELEGRAM_TOKEN:
     raise RuntimeError("Нет TELEGRAM_TOKEN в .env/переменных окружения.")
 
-# твой (ваш) Telegram ID — укажи здесь:
-ADMIN_IDS = {981248855}  # <-- замени на свой numeric ID
+def _load_admin_ids():
+    """
+    Читает список админов из переменных окружения:
+    ADMIN_IDS = "123,456" ИЛИ ADMIN_ID = "123"
+    """
+    s = os.getenv("ADMIN_IDS") or os.getenv("ADMIN_ID") or ""
+    ids = set()
+    for part in s.replace(" ", "").split(","):
+        if part.isdigit():
+            ids.add(int(part))
+    return ids
+
+ADMIN_IDS = _load_admin_ids()
 
 NUM_SECTIONS = 7
 DATA_FILE = "data.json"
 
 # Рабочие часы / зона
 WORK_TZ = os.getenv("WORK_TZ", "Europe/Paris")
-WORK_START = int(os.getenv("WORK_START", "6"))   # включительно, по умолчанию 06:00
-WORK_END   = int(os.getenv("WORK_END",   "22"))  # исключая, по умолчанию 22:00
+WORK_START = int(os.getenv("WORK_START", "6"))   # включительно
+WORK_END   = int(os.getenv("WORK_END",   "22"))  # исключая
 OFF_MSG = os.getenv(
     "OFF_MSG",
     "⏰ Бот доступен в рабочее время: 06:00–22:00 (Europe/Paris). Попробуйте позже."
 )
 ADMIN_BYPASS = os.getenv("ADMIN_BYPASS", "1") in {"1", "true", "True"}  # админ может работать ночью
 
-# Keep-alive (самопинг) — задай URL сервиса (например, https://my-bot.onrender.com/)
+# Keep-alive (самопинг)
 KEEPALIVE_URL = os.getenv("KEEPALIVE_URL", "").strip()
-KEEPALIVE_EVERY_SEC = int(os.getenv("KEEPALIVE_EVERY_SEC", "300"))  # каждые 5 минут
+KEEPALIVE_EVERY_SEC = int(os.getenv("KEEPALIVE_EVERY_SEC", "300"))
 
 # ---------- МИНИ HTTP-СЕРВЕР ДЛЯ RENDER ----------
-# Render ждёт, что приложение слушает порт $PORT.
 from flask import Flask
 app_http = Flask(__name__)
 
@@ -57,7 +67,6 @@ def run_http():
     app_http.run(host="0.0.0.0", port=port)
 
 def keepalive_loop():
-    """Периодически пинаем внешний URL, чтобы хостинг не усыплял сервис."""
     if not KEEPALIVE_URL:
         log.info("KEEPALIVE_URL не задан — самопинг отключен.")
         return
@@ -75,19 +84,15 @@ def is_admin(uid: int) -> bool:
     return uid in ADMIN_IDS
 
 def is_work_time(dt: datetime | None = None) -> bool:
-    """Возвращает True, если сейчас внутри интервала [WORK_START, WORK_END)."""
     tz = ZoneInfo(WORK_TZ)
     now = dt or datetime.now(tz)
     h = now.hour
-    # поддержка «перелома суток», если вдруг кто-то захочет END < START
     if WORK_START <= WORK_END:
         return WORK_START <= h < WORK_END
     else:
-        # напр. 22..24 и 0..6
         return h >= WORK_START or h < WORK_END
 
 async def guard_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    """Пускать ли пользователя в обработчик сообщений."""
     uid = update.effective_user.id if update.effective_user else 0
     if is_work_time() or (ADMIN_BYPASS and is_admin(uid)):
         return True
@@ -95,7 +100,6 @@ async def guard_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> b
     return False
 
 async def guard_callback(q, uid: int) -> bool:
-    """Пускать ли пользователя в обработчик callback-кнопок."""
     if is_work_time() or (ADMIN_BYPASS and is_admin(uid)):
         return True
     await q.answer(OFF_MSG, show_alert=True)
@@ -188,7 +192,7 @@ def public_subs_keyboard(sec_id: str):
     rows.append([InlineKeyboardButton("⬅️ Назад к меню", callback_data="vback")])
     return InlineKeyboardMarkup(rows)
 
-# ---------- ОБРАБОТЧИКИ ДЛЯ ВСЕХ ----------
+# ---------- ОБЩИЕ КОМАНДЫ ----------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await guard_message(update, context):
         return
@@ -196,6 +200,18 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if is_admin(update.effective_user.id):
         text += "\n\n⚙️ Админу: для редактирования используй /manage."
     await update.message.reply_text(text, reply_markup=public_sections_keyboard())
+
+async def myid(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    uid = update.effective_user.id if update.effective_user else 0
+    await update.message.reply_text(f"Ваш Telegram ID: {uid}")
+
+async def whoami(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    uid = update.effective_user.id if update.effective_user else 0
+    await update.message.reply_text(
+        f"Ваш ID: {uid}\n"
+        f"Админ: {'да' if uid in ADMIN_IDS else 'нет'}\n"
+        f"ADMIN_IDS: {sorted(ADMIN_IDS) if ADMIN_IDS else '[]'}"
+    )
 
 async def public_view_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
@@ -226,7 +242,6 @@ async def manage(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user.id):
         await update.message.reply_text("Доступ только для администратора.")
         return ConversationHandler.END
-    # Админ ночью допускается, если ADMIN_BYPASS = true
     if not is_work_time() and not ADMIN_BYPASS:
         await update.message.reply_text(OFF_MSG)
         return ConversationHandler.END
@@ -236,7 +251,6 @@ async def manage(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     uid = q.from_user.id
-    # Разрешаем админу ночью (если ADMIN_BYPASS=1)
     if not (is_work_time() or (ADMIN_BYPASS and is_admin(uid))):
         await q.answer(OFF_MSG, show_alert=True)
         return ConversationHandler.END
@@ -348,7 +362,6 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ---------- РЕГИСТРАЦИЯ И ЗАПУСК ----------
 def main():
-    # HTTP + keepalive в отдельных потоках
     threading.Thread(target=run_http, daemon=True).start()
     if KEEPALIVE_URL:
         threading.Thread(target=keepalive_loop, daemon=True).start()
@@ -358,7 +371,9 @@ def main():
     # Публичные команды/кнопки
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("menu", start))
-    app.add_handler(CallbackQueryHandler(public_view_cb, pattern="^v"))  # vsec/vsub/vback
+    app.add_handler(CommandHandler("myid", myid))
+    app.add_handler(CommandHandler("whoami", whoami))
+    app.add_handler(CallbackQueryHandler(public_view_cb, pattern="^v"))
 
     # Админ-диалог
     manage_conv = ConversationHandler(
@@ -383,8 +398,10 @@ def main():
     )
     app.add_handler(manage_conv)
 
-    log.info("Бот запускается… Рабочие часы %02d:00–%02d:00, TZ=%s (админ ночью: %s)",
-             WORK_START, WORK_END, WORK_TZ, ADMIN_BYPASS)
+    log.info(
+        "Бот запускается… Рабочие часы %02d:00–%02d:00, TZ=%s, ADMIN_BYPASS=%s, ADMIN_IDS=%s",
+        WORK_START, WORK_END, WORK_TZ, ADMIN_BYPASS, sorted(ADMIN_IDS),
+    )
     app.run_polling(close_loop=False)
 
 if __name__ == "__main__":
