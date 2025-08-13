@@ -353,7 +353,7 @@ def main():
     if KEEPALIVE_URL:
         threading.Thread(target=keepalive_loop, daemon=True).start()
 
-    app = Application.builder().token(TELEGRAM_TOKEN).build()
+    app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
     # Публичные команды/кнопки
     app.add_handler(CommandHandler("start", start))
