@@ -6,15 +6,14 @@ from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, CallbackQueryHandler,
-    ConversationHandler, MessageHandler, ContextTypes, filters
-)
-...
-app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
-
+    ConversationHandler, MessageHandler, ContextTypes, filters,
 )
 
 # ---------- ЛОГИ ----------
-logging.basicConfig(format="%(asctime)s %(name)s [%(levelname)s] %(message)s", level=logging.INFO)
+logging.basicConfig(
+    format="%(asctime)s %(name)s [%(levelname)s] %(message)s",
+    level=logging.INFO,
+)
 log = logging.getLogger("bot")
 
 # ---------- НАСТРОЙКИ ----------
