@@ -26,7 +26,7 @@ if not TELEGRAM_TOKEN:
 def _load_admin_ids():
     """
     Читает список админов из переменных окружения:
-    ADMIN_IDS = "123,456" ИЛИ ADMIN_ID = "123"
+    ADMIN_IDS = "7874461896" ИЛИ ADMIN_ID = "123"
     """
     s = os.getenv("ADMIN_IDS") or os.getenv("ADMIN_ID") or ""
     ids = set()
