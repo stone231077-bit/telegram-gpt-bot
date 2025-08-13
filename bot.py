@@ -5,8 +5,12 @@ from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
-    Application, CommandHandler, CallbackQueryHandler,
+    ApplicationBuilder, CommandHandler, CallbackQueryHandler,
     ConversationHandler, MessageHandler, ContextTypes, filters
+)
+...
+app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+
 )
 
 # ---------- ЛОГИ ----------
